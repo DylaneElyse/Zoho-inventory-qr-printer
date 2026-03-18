@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Inventory QR Printer</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f5f2ee;
+      --card-bg: #ffffff;
+      --accent: #c0392b;
+      --text-primary: #1a1a1a;
+      --text-secondary: #666;
+      --border: #e0dbd4;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 36px 40px 28px;
+      max-width: 380px;
+      width: 100%;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+      text-align: center;
+    }
+
+    .eyebrow {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+
+    .item-name {
+      font-family: 'DM Serif Display', serif;
+      font-size: 26px;
+      color: var(--text-primary);
+      line-height: 1.2;
+      margin-bottom: 24px;
+    }
+
+    .qr-wrap {
+      display: inline-block;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: white;
+      margin-bottom: 24px;
+    }
+
+    .qr-wrap img {
+      display: block;
+      width: 200px;
+      height: 200px;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+
+    .fields { text-align: left; width: 100%; }
+
+    .field-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+
+    .field-row:last-child { border-bottom: none; }
+
+    .field-label {
+      font-weight: 600;
+      color: var(--text-secondary);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      flex-shrink: 0;
+      margin-right: 12px;
+    }
+
+    .field-value {
+      color: var(--text-primary);
+      font-weight: 500;
+      text-align: right;
+    }
+
+    .status {
+      color: var(--text-secondary);
+      font-size: 14px;
+      padding: 40px 0;
+    }
+
+    .print-btn {
+      margin-top: 24px;
+      padding: 11px 32px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .print-btn:hover { background: #a93226; }
+
+    @media print {
+      body { background: white; padding: 0; justify-content: flex-start; }
+      .card { box-shadow: none; border: none; max-width: 100%; padding: 16px; }
+      .print-btn { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="status" id="status">Loading record...</div>
+
+    <div id="content" style="display:none;">
+      <div class="eyebrow">Inventory Item</div>
+      <div class="item-name" id="item-name"></div>
+      <div class="qr-wrap">
+        <img id="qr-img" src="" alt="QR Code" />
+      </div>
+      <hr class="divider"/>
+      <div class="fields" id="fields"></div>
+    </div>
+  </div>
+
+  <button class="print-btn" id="print-btn" style="display:none;" onclick="window.print()">
+    🖨️ Print QR Code
+  </button>
+
+  <script src="https://js.zohostatic.com/zohocrm/api/2.0/js/zcrmsdk.js"></script>
+  <script>
+    // on() must be registered BEFORE init() is called
+    ZOHO.embeddedApp.on("PageLoad", function(data) {
+      var recordId = data.EntityId;
+      var moduleApi = data.Entity;
+
+      ZOHO.CRM.API.getRecord({ Entity: moduleApi, RecordID: recordId })
+        .then(function(result) {
+          try {
+            var rec = result.data[0];
+
+            var name      = rec["Name"]      || "Unnamed Item";
+            var unitPrice = rec["Unit_Price"] != null ? rec["Unit_Price"] : null;
+
+            document.getElementById("item-name").innerText = name;
+
+            // Dynamically builds the correct URL for this specific record
+            var recordUrl = "https://crm.zoho.com/crm/cutandloopinc/tab/" + moduleApi + "/" + recordId;
+            document.getElementById("qr-img").src =
+              "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(recordUrl);
+
+            var fieldsData = [
+              { label: "Unit Selling Price", value: unitPrice !== null ? "$" + parseFloat(unitPrice).toFixed(2) : null }
+            ];
+
+            var fieldsHtml = "";
+            fieldsData.forEach(function(f) {
+              if (f.value) {
+                fieldsHtml +=
+                  '<div class="field-row">' +
+                    '<span class="field-label">' + f.label + '</span>' +
+                    '<span class="field-value">' + f.value + '</span>' +
+                  '</div>';
+              }
+            });
+            document.getElementById("fields").innerHTML = fieldsHtml;
+
+            document.getElementById("status").style.display    = "none";
+            document.getElementById("content").style.display   = "block";
+            document.getElementById("print-btn").style.display = "inline-block";
+
+          } catch(e) {
+            document.getElementById("status").innerText = "Error parsing record data.";
+            console.error(e);
+          }
+        })
+        .catch(function(err) {
+          document.getElementById("status").innerText = "Failed to load record. Please close and try again.";
+          console.error(err);
+        });
+    });
+
+    // init() is called AFTER the listener is registered
+    ZOHO.embeddedApp.init();
+  </script>
+</body>
+</html>
